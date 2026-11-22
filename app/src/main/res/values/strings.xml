@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoFlip</string>
+    <string name="service_description">Call screen asle automatic camera flip button e tap kore.</string>
+</resources>
