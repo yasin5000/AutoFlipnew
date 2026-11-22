@@ -1,9 +1,16 @@
 package com.example.autoflip
 
+import android.Manifest
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -16,11 +23,68 @@ import android.widget.Toast
 class MainActivity : Activity() {
 
     private lateinit var status: TextView
+    private lateinit var adbHelp: TextView
+
+    private fun startGuard() {
+        try {
+            val i = Intent(this, GuardService::class.java)
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Guard start hoyni: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun askBattery() {
+        val pm = getSystemService(PowerManager::class.java)
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            Toast.makeText(this, "Battery permission ager theke deya ache ✔", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+            )
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+    }
+
+    private fun openAutostart() {
+        val candidates = listOf(
+            ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+            ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"),
+            ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager"),
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
+            ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")
+        )
+        for (c in candidates) {
+            try {
+                startActivity(Intent().setComponent(c))
+                return
+            } catch (e: Exception) {
+                // porer ta try korbo
+            }
+        }
+        // Autostart screen na paile App info te niye jabo
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        )
+        Toast.makeText(this, "Ekhane Battery → Unrestricted ar Autostart ON korun", Toast.LENGTH_LONG).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val p = Prefs(this)
         val pad = (16 * resources.displayMetrics.density).toInt()
+
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+        startGuard()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -42,6 +106,30 @@ class MainActivity : Activity() {
             text = "1) Accessibility Service ON korun"
             setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         })
+
+        root.addView(Button(this).apply {
+            text = "2) Battery 'Unrestricted' permission nin"
+            setOnClickListener { askBattery() }
+        })
+
+        root.addView(Button(this).apply {
+            text = "3) Autostart / App settings kholen"
+            setOnClickListener { openAutostart() }
+        })
+
+        root.addView(Switch(this).apply {
+            text = "Auto re-enable (off hole nije on)"
+            isChecked = p.guard
+            setOnCheckedChangeListener { _, c -> p.guard = c }
+        })
+
+        adbHelp = TextView(this).apply {
+            text = "Auto re-enable er jonno PC theke ekbar ei command chalan (USB debugging ON kore):\n\n" +
+                "adb shell pm grant com.example.autoflip android.permission.WRITE_SECURE_SETTINGS"
+            setTextIsSelectable(true)
+            setPadding(0, pad / 2, 0, pad / 2)
+        }
+        root.addView(adbHelp)
 
         root.addView(Switch(this).apply {
             text = "Auto flip chalu"
@@ -126,7 +214,11 @@ class MainActivity : Activity() {
         val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
             ?.contains(packageName) == true
         val learned = Prefs(this).learnedPkg
-        val base = if (enabled) "Service: ON ✔" else "Service: OFF ✘ (Accessibility theke AutoFlip chalu korun)"
-        status.text = if (learned.isNotBlank()) "$base\nDetected app: $learned" else base
+        val canGuard = ServiceGuard.canWrite(this)
+        var t = if (enabled) "Service: ON ✔" else "Service: OFF ✘ (Accessibility theke AutoFlip chalu korun)"
+        t += if (canGuard) "\nAuto re-enable: READY ✔" else "\nAuto re-enable: ADB permission dorkar ✘ (niche dekhun)"
+        if (learned.isNotBlank()) t += "\nDetected app: $learned"
+        status.text = t
+        adbHelp.visibility = if (canGuard) View.GONE else View.VISIBLE
     }
 }

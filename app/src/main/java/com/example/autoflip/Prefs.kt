@@ -46,4 +46,9 @@ class Prefs(context: Context) {
     var learnedPkg: String
         get() = sp.getString("learnedPkg", "") ?: ""
         set(v) = sp.edit().putString("learnedPkg", v).apply()
+
+    /** Accessibility off hole nije abar on korbe. */
+    var guard: Boolean
+        get() = sp.getBoolean("guard", true)
+        set(v) = sp.edit().putBoolean("guard", v).apply()
 }

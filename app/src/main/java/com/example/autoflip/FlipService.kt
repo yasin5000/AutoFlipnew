@@ -31,6 +31,12 @@ class FlipService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        try {
+            val i = android.content.Intent(this, GuardService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } catch (e: Exception) {
+            Log.e(TAG, "guard start failed", e)
+        }
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
@@ -41,6 +47,15 @@ class FlipService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Kono error hole service jeno crash kore band na hoye jay
+        try {
+            handleEvent(event)
+        } catch (e: Exception) {
+            Log.e(TAG, "event error", e)
+        }
+    }
+
+    private fun handleEvent(event: AccessibilityEvent?) {
         val prefs = Prefs(this)
         if (!prefs.enabled) return
         val pkg = event?.packageName?.toString() ?: return
