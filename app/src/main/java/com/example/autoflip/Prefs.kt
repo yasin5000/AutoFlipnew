@@ -11,7 +11,7 @@ class Prefs(context: Context) {
 
     /** Khali rakhle sob app e kaj korbe. Tigo er package name dile shudhu oi app e. */
     var targetPackage: String
-        get() = sp.getString("pkg", "") ?: ""
+        get() = sp.getString("pkg", "com.tigo.flower") ?: ""
         set(v) = sp.edit().putString("pkg", v.trim()).apply()
 
     /** Comma diye alada kora text; screen e ei text paoa gele "call interface" dhora hobe. */
@@ -46,6 +46,11 @@ class Prefs(context: Context) {
     var learnedPkg: String
         get() = sp.getString("learnedPkg", "") ?: ""
         set(v) = sp.edit().putString("learnedPkg", v).apply()
+
+    /** Guard service accessibility ON korle true kore, service chalu hole Tigo abar khole. */
+    var relaunch: Boolean
+        get() = sp.getBoolean("relaunch", false)
+        set(v) = sp.edit().putBoolean("relaunch", v).apply()
 
     /** Accessibility off hole nije abar on korbe. */
     var guard: Boolean

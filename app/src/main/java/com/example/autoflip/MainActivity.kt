@@ -8,6 +8,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
@@ -24,6 +26,15 @@ class MainActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var adbHelp: TextView
+    private lateinit var logView: TextView
+    private val ui = Handler(Looper.getMainLooper())
+
+    private val refresher = object : Runnable {
+        override fun run() {
+            refreshStatus()
+            ui.postDelayed(this, 1500)
+        }
+    }
 
     private fun startGuard() {
         try {
@@ -49,6 +60,18 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun askOverlay() {
+        if (Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Display over other apps ager theke deya ache ✔", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        }
+    }
+
     private fun openAutostart() {
         val candidates = listOf(
             ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
@@ -67,7 +90,6 @@ class MainActivity : Activity() {
                 // porer ta try korbo
             }
         }
-        // Autostart screen na paile App info te niye jabo
         startActivity(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
         )
@@ -97,7 +119,7 @@ class MainActivity : Activity() {
             setPadding(0, pad, 0, 0)
         }
 
-        root.addView(TextView(this).apply { text = "AutoFlip"; textSize = 24f })
+        root.addView(TextView(this).apply { text = "AutoFlip v3"; textSize = 24f })
 
         status = TextView(this)
         root.addView(status)
@@ -115,6 +137,11 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply {
             text = "3) Autostart / App settings kholen"
             setOnClickListener { openAutostart() }
+        })
+
+        root.addView(Button(this).apply {
+            text = "4) 'Display over other apps' permission"
+            setOnClickListener { askOverlay() }
         })
 
         root.addView(Switch(this).apply {
@@ -201,24 +228,66 @@ class MainActivity : Activity() {
         })
 
         root.addView(Button(this).apply {
+            text = "Tigo app kholo"
+            setOnClickListener {
+                p.targetPackage = pkg.text.toString()
+                if (!Launcher.openTarget(context)) {
+                    Toast.makeText(context, "Tigo khola gelo na. Package name thik ache kina dekhun", Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+
+        root.addView(Button(this).apply {
             text = "Test: ekhon flip tap koro (1 sec por)"
             setOnClickListener {
                 Toast.makeText(context, "Tigo call screen e jan, 1 sec por tap hobe", Toast.LENGTH_LONG).show()
                 window.decorView.postDelayed({ FlipService.instance?.flipNow() }, 1000)
             }
         })
+
+        root.addView(Button(this).apply {
+            text = "Debug: 6 sec por screen er text log e rakho"
+            setOnClickListener {
+                Toast.makeText(context, "Tigo te jan. 6 sec por screen porbe, tarpor ekhane fire asun", Toast.LENGTH_LONG).show()
+                window.decorView.postDelayed({ FlipService.instance?.dumpScreen() }, 6000)
+            }
+        })
+
+        root.addView(label("Log (notun ta upore)"))
+        logView = TextView(this).apply {
+            textSize = 11f
+            setTextIsSelectable(true)
+        }
+        root.addView(logView)
+    }
+
+    private fun refreshStatus() {
+        val listed = ServiceGuard.isEnabled(this)
+        val running = FlipService.instance != null
+        val canGuard = ServiceGuard.canWrite(this)
+        val learned = Prefs(this).learnedPkg
+
+        var t = when {
+            listed && running -> "Service: ON ✔ (kaj korche)"
+            listed -> "Service: ON kintu chalu hoyni ⚠ (Accessibility theke off/on korun)"
+            else -> "Service: OFF ✘ (Accessibility theke AutoFlip chalu korun)"
+        }
+        t += if (canGuard) "\nAuto re-enable: READY ✔" else "\nAuto re-enable: ADB permission dorkar ✘ (niche dekhun)"
+        t += if (Settings.canDrawOverlays(this)) "\nDisplay over apps: ✔" else "\nDisplay over apps: ✘ (button 4)"
+        if (learned.isNotBlank()) t += "\nDetected app: $learned"
+        status.text = t
+        adbHelp.visibility = if (canGuard) View.GONE else View.VISIBLE
+        logView.text = AppLog.text()
     }
 
     override fun onResume() {
         super.onResume()
-        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-            ?.contains(packageName) == true
-        val learned = Prefs(this).learnedPkg
-        val canGuard = ServiceGuard.canWrite(this)
-        var t = if (enabled) "Service: ON ✔" else "Service: OFF ✘ (Accessibility theke AutoFlip chalu korun)"
-        t += if (canGuard) "\nAuto re-enable: READY ✔" else "\nAuto re-enable: ADB permission dorkar ✘ (niche dekhun)"
-        if (learned.isNotBlank()) t += "\nDetected app: $learned"
-        status.text = t
-        adbHelp.visibility = if (canGuard) View.GONE else View.VISIBLE
+        ui.removeCallbacks(refresher)
+        ui.post(refresher)
+    }
+
+    override fun onPause() {
+        ui.removeCallbacks(refresher)
+        super.onPause()
     }
 }
